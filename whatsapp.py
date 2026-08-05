@@ -61,8 +61,25 @@ def _get_or_create_webhook_token(db, user_id, meta):
 
 
 def _webhook_url(user_id, token):
-    base = infra_settings.wa_app_public_url().rstrip("/")
+    """AgencyWA posts inbound WA events here (must be public Python HTTPS)."""
+    base = (infra_settings.wa_app_public_url() or "").strip().rstrip("/")
+    # Never point webhooks at Hostinger /api proxy, Vite, or old :8001 panel
+    if (
+        not base
+        or ":5173" in base
+        or ":8001" in base
+        or "hostingersite.com" in base.lower()
+        or base.rstrip("/").endswith("/api")
+    ):
+        base = "https://38.84.24.79:5000"
+    if base.startswith("http://38.84.24.79"):
+        base = "https://38.84.24.79:5000"
     return f"{base}/webhooks/whatsapp/{user_id}/{token}"
+
+
+def _is_legacy_panel_url(url):
+    u = (url or "").lower()
+    return ":8001" in u or "/connect/user_" in u
 
 
 def _session_name(user_id):
@@ -185,12 +202,13 @@ def _session_payload(agency_session, fallback_name="", previous=None):
     s = agency_session if isinstance(agency_session, dict) else {}
     status = s.get("status") or "pending"
     qr = _normalize_qr_image(s.get("qr_code") or s.get("qrcode") or "")
-    connect_url = (
-        s.get("connect_url")
-        or s.get("qr_link")
-        or previous.get("qr_link")
-        or ""
-    )
+    connect_url = (s.get("connect_url") or s.get("qr_link") or "").strip()
+    # Drop stale WPPConnect / :8001 panel links from local meta
+    prev_link = (previous.get("qr_link") or "").strip()
+    if not connect_url and prev_link and not _is_legacy_panel_url(prev_link):
+        connect_url = prev_link
+    if _is_legacy_panel_url(connect_url):
+        connect_url = ""
     connected = _is_connected_status(status) or bool(s.get("connected"))
     if connected:
         message = "WhatsApp is connected"
@@ -747,6 +765,17 @@ def connect_whatsapp(user_id):
         session_name = (existing.get("session_name") or "").strip() or _session_name(user_id)
         display_name = (user or {}).get("name") or session_name
         created = False
+
+        # Drop stale local meta from old :8001 panel so we re-bind via AgencyWA
+        if _is_legacy_panel_url(existing.get("qr_link")):
+            existing = {
+                **existing,
+                "qr_link": "",
+                "qrcode": "",
+                "status": "pending",
+                "connected": False,
+                "message": "",
+            }
 
         # 1) Status check first — GET /sessions.php?session_name=
         status_code, status_data = _get_agency_session(session_name)
