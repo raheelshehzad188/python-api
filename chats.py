@@ -331,8 +331,11 @@ def resolve_chat_reply(
                     cache_model=active_model,
                 )
             else:
-                # Last resort: inline system instruction (no cache).
+                # Last resort: inline system instruction (no cache) on current model.
+                from gemini import DEFAULT_MODEL as _DEFAULT_MODEL
+
                 active_cache_id = ""
+                active_model = _DEFAULT_MODEL
                 result = _gemini_call(
                     gemini,
                     contents,

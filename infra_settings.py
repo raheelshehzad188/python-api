@@ -16,7 +16,9 @@ except Exception:
     _CFG_AGENCY_URL = "https://orange-rat-729701.hostingersite.com/api"
     _CFG_AGENCY_KEY = "agw_chatbot_integration_key_01"
     _CFG_AGENCY_SECRET = "chatbot_api_secret_9f3a2c1b8e7d6f5a4c3b2a1d0e9f8a7b"
-    _CFG_WA_PUBLIC = "https://38.84.24.79:5000"
+    _CFG_WA_PUBLIC = (
+        "https://mediumturquoise-badger-120093.hostingersite.com/api"
+    )
     _CFG_NOTIFY = "923004210607"
     _CFG_API_BASE = "/api"
 
@@ -39,6 +41,10 @@ _cache = {}
 _REMOTE_IP = "38.84.24.79"
 _PROD_PYTHON = f"https://{_REMOTE_IP}:5000"
 _PROD_AGENCY = "https://orange-rat-729701.hostingersite.com/api"
+# AgencyWA must POST to a trusted SSL host; Hostinger /api proxies to Python.
+_PROD_WEBHOOK_RELAY = (
+    "https://mediumturquoise-badger-120093.hostingersite.com/api"
+)
 
 
 def clear_cache():
@@ -65,15 +71,23 @@ def normalize_infra_value(key, value):
         return text
 
     if key == "wa_app_public_url":
-        if not text:
-            return _PROD_PYTHON
-        # Any variant of the RDP IP → canonical HTTPS:5000
-        if _REMOTE_IP in text:
-            return _PROD_PYTHON
         text = text.rstrip("/")
-        # Mistaken Hostinger /api as webhook base
+        if not text:
+            return _PROD_WEBHOOK_RELAY
+        # Self-signed RDP IP — AgencyWA delivery fails; use Hostinger relay
+        if _REMOTE_IP in text:
+            return _PROD_WEBHOOK_RELAY
+        # Agency panel is not a webhook receiver
+        if "orange-rat" in text.lower():
+            return _PROD_WEBHOOK_RELAY
+        # Vite / legacy panel
+        if ":5173" in text or ":8001" in text:
+            return _PROD_WEBHOOK_RELAY
+        # React Hostinger (with or without /api) → canonical relay
+        if "mediumturquoise-badger" in text.lower():
+            return _PROD_WEBHOOK_RELAY
         if text.endswith("/api") and "hostingersite.com" in text.lower():
-            return _PROD_PYTHON
+            return _PROD_WEBHOOK_RELAY
         return text
 
     return text

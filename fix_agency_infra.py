@@ -8,7 +8,8 @@ import secret_store
 AGENCY_URL = "https://orange-rat-729701.hostingersite.com/api"
 AGENCY_KEY = "agw_chatbot_integration_key_01"
 AGENCY_SECRET = "chatbot_api_secret_9f3a2c1b8e7d6f5a4c3b2a1d0e9f8a7b"
-WEBHOOK_BASE = "https://38.84.24.79:5000"
+# Trusted SSL relay (Hostinger → Python). Direct :5000 fails Agency SSL verify.
+WEBHOOK_BASE = "https://mediumturquoise-badger-120093.hostingersite.com/api"
 NOTIFY = "923004210607"
 
 

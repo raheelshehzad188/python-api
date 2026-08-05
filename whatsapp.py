@@ -60,20 +60,24 @@ def _get_or_create_webhook_token(db, user_id, meta):
     return token
 
 
+# Trusted Hostinger relay (valid SSL) → api-proxy.php → Python self-signed.
+# AgencyWA cannot POST to https://38.84.24.79:5000 (self-signed cert fails).
+_WEBHOOK_RELAY_BASE = "https://mediumturquoise-badger-120093.hostingersite.com/api"
+
+
 def _webhook_url(user_id, token):
-    """AgencyWA posts inbound WA events here (must be public Python HTTPS)."""
+    """AgencyWA posts here. Prefer Hostinger /api relay (trusted SSL), not bare RDP IP."""
     base = (infra_settings.wa_app_public_url() or "").strip().rstrip("/")
-    # Never point webhooks at Hostinger /api proxy, Vite, or old :8001 panel
-    if (
+    bad = (
         not base
         or ":5173" in base
         or ":8001" in base
-        or "hostingersite.com" in base.lower()
-        or base.rstrip("/").endswith("/api")
-    ):
-        base = "https://38.84.24.79:5000"
-    if base.startswith("http://38.84.24.79"):
-        base = "https://38.84.24.79:5000"
+        or "orange-rat" in base.lower()
+        or "38.84.24.79" in base
+        or base.startswith("http://")
+    )
+    if bad:
+        base = _WEBHOOK_RELAY_BASE
     return f"{base}/webhooks/whatsapp/{user_id}/{token}"
 
 

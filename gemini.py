@@ -13,8 +13,15 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 # Primary model first; fall back when Google reports overload / rate limits.
 # When using cachedContent, ONLY the cache's model is allowed (no cross-model fallback).
+# Do NOT list retired models (e.g. gemini-1.5-flash) — Google returns "not found".
 DEFAULT_MODEL = "gemini-2.5-flash"
-FALLBACK_MODELS = ("gemini-2.0-flash", "gemini-1.5-flash")
+FALLBACK_MODELS = ("gemini-2.0-flash", "gemini-2.5-flash-lite")
+RETIRED_MODELS = frozenset({
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash-latest",
+    "gemini-pro",
+})
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 1.5  # seconds; doubled after each retry
 
@@ -86,17 +93,37 @@ class Gemini:
             return True
         return any(marker in msg for marker in CACHE_NOT_FOUND_MARKERS)
 
+    @staticmethod
+    def _is_model_unavailable(message, http_code=0):
+        """True when this model id is retired / not supported — try next model."""
+        msg = (message or "").lower()
+        if http_code == 404:
+            return True
+        return any(
+            phrase in msg
+            for phrase in (
+                "is not found",
+                "not supported for generatecontent",
+                "not supported for",
+                "no longer available",
+                "invalid model",
+            )
+        )
+
     def _models_to_try(self, preferred=None, allow_fallback=True):
-        """Primary model first, then fallbacks (no duplicates)."""
+        """Primary model first, then fallbacks (no duplicates / no retired ids)."""
         seen = set()
         order = []
         primary = preferred or self.model
-        candidates = (primary,) if not allow_fallback else (primary, *FALLBACK_MODELS)
+        if primary in RETIRED_MODELS:
+            primary = DEFAULT_MODEL
+        candidates = (primary,) if not allow_fallback else (primary, DEFAULT_MODEL, *FALLBACK_MODELS)
         for name in candidates:
-            if name and name not in seen:
-                seen.add(name)
-                order.append(name)
-        return order
+            if not name or name in seen or name in RETIRED_MODELS:
+                continue
+            seen.add(name)
+            order.append(name)
+        return order or [DEFAULT_MODEL]
 
     # ------------------------------------------------------------------ #
     #  low level request helper                                          #
@@ -206,6 +233,10 @@ class Gemini:
                             time.sleep(RETRY_BASE_DELAY * (2 ** attempt))
                             continue
                         break  # exhausted retries for this model, try next
+
+                    # Retired / unknown model → try next in the list
+                    if self._is_model_unavailable(last_error, http_code):
+                        break
 
                     return {
                         "success": False,

@@ -171,21 +171,38 @@ def update_user_cache(db, user_id, ttl_seconds=DEFAULT_TTL):
 
     if not result.get("success"):
         error = result.get("error", "Failed to create cache")
-        # Gemini refuses to cache short instructions (needs ~1024+ tokens).
-        # That's not a failure for us: store the instruction inline and skip
-        # the cache. Chat will send the instruction with each request instead.
-        if "too small" in error.lower() or "min_total_token_count" in error.lower():
+        err_l = error.lower()
+        # Fall back to inline systemInstruction (no cachedContent):
+        # - instructions too short for Google's min token cache
+        # - free-tier / quota cannot create cachedContents
+        inline_ok = any(
+            marker in err_l
+            for marker in (
+                "too small",
+                "min_total_token_count",
+                "limit exceeded",
+                "storage tokens",
+                "cachedcontentstoragetokens",
+                "quota",
+                "resource exhausted",
+                "free tier",
+            )
+        )
+        if inline_ok:
             _upsert_meta(db, user_id, CACHE_ID_KEY, "")
             _upsert_meta(db, user_id, CACHE_EXPIRES_KEY, "")
-            _upsert_meta(db, user_id, CACHE_MODEL_KEY, "")
+            _upsert_meta(db, user_id, CACHE_MODEL_KEY, DEFAULT_MODEL)
             return {
                 "success": True,
                 "cached": False,
                 "cache_id": None,
                 "expire_time": None,
-                "cache_model": None,
+                "cache_model": DEFAULT_MODEL,
                 "instruction_preview": system_instruction,
-                "message": "Instructions saved. They are too short for Gemini caching, so they will be sent with every chat instead.",
+                "message": (
+                    "Instructions saved without Gemini context cache "
+                    f"(reason: {error[:180]}). Chat will send them inline."
+                ),
             }
         return {"success": False, "message": error}
 
@@ -326,7 +343,10 @@ def ensure_user_cache(db, user_id, ttl_seconds=DEFAULT_TTL, force_refresh=False)
     if needs_refresh:
         result = update_user_cache(db, user_id, ttl_seconds=ttl_seconds)
         if not result.get("success"):
-            # Fall back to inline system instruction if cache cannot be created.
+            # Clear stale expired cache ids so we never pin generateContent to them.
+            _upsert_meta(db, user_id, CACHE_ID_KEY, "")
+            _upsert_meta(db, user_id, CACHE_EXPIRES_KEY, "")
+            _upsert_meta(db, user_id, CACHE_MODEL_KEY, DEFAULT_MODEL)
             return {
                 "success": True,
                 "cache_id": "",
