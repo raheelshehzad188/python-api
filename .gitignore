@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+.settings_master_key
+uploads/*
+!uploads/.gitkeep
+.DS_Store
+*.log
+.idea/
+.vscode/
