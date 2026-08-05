@@ -30,6 +30,7 @@ from bookings import bookings_bp, ensure_schema as ensure_bookings_schema
 from restaurant_settings import restaurant_settings_bp, ensure_schema as ensure_restaurant_schema
 from restaurant_crud import restaurant_crud_bp
 from restaurant_dashboard import restaurant_dashboard_bp
+from agent_tester import agent_tester_bp, ensure_schema as ensure_agent_tester_schema
 
 app = Flask(__name__)
 CORS(app)
@@ -55,6 +56,7 @@ app.register_blueprint(bookings_bp)
 app.register_blueprint(restaurant_settings_bp)
 app.register_blueprint(restaurant_crud_bp)
 app.register_blueprint(restaurant_dashboard_bp)
+app.register_blueprint(agent_tester_bp)
 
 ensure_roles_schema()
 ensure_user_meta_schema()
@@ -70,6 +72,7 @@ ensure_wa_messages_schema()
 ensure_services_settings_schema()
 ensure_bookings_schema()
 ensure_restaurant_schema()
+ensure_agent_tester_schema()
 
 @app.route("/health", methods=["GET"])
 def health():

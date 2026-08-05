@@ -3,6 +3,7 @@ from .general import General
 from .job_posting import Job_posting
 from .services import Services
 from .restaurant import Restaurant
+from .tester import Tester
 
 CLASSES = {
     Ecommerce.name: Ecommerce,
@@ -10,6 +11,7 @@ CLASSES = {
     Job_posting.name: Job_posting,
     Services.name: Services,
     Restaurant.name: Restaurant,
+    Tester.name: Tester,
 }
 
 
