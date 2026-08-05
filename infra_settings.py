@@ -1,29 +1,82 @@
 """Runtime infrastructure URLs — DB (site_settings) with env/file fallbacks."""
 
 import os
+import re
+
+try:
+    from config import (
+        AGENCY_API_BASE_URL as _CFG_AGENCY_URL,
+        AGENCY_API_KEY as _CFG_AGENCY_KEY,
+        AGENCY_API_SECRET as _CFG_AGENCY_SECRET,
+        WA_APP_PUBLIC_URL as _CFG_WA_PUBLIC,
+        WA_WEBHOOK_NOTIFY_PHONE as _CFG_NOTIFY,
+        API_BASE_URL as _CFG_API_BASE,
+    )
+except Exception:
+    _CFG_AGENCY_URL = "https://orange-rat-729701.hostingersite.com/api"
+    _CFG_AGENCY_KEY = "agw_chatbot_integration_key_01"
+    _CFG_AGENCY_SECRET = "chatbot_api_secret_9f3a2c1b8e7d6f5a4c3b2a1d0e9f8a7b"
+    _CFG_WA_PUBLIC = "https://38.84.24.79:5000"
+    _CFG_NOTIFY = "923004210607"
+    _CFG_API_BASE = "/api"
 
 _DEFAULTS = {
-    "api_base_url": os.environ.get("API_BASE_URL", "http://127.0.0.1:5000"),
-    "agency_api_base_url": os.environ.get(
-        "AGENCY_API_BASE_URL", "http://localhost/agencywa/api"
-    ),
-    "agency_api_key": os.environ.get(
-        "AGENCY_API_KEY", "agw_chatbot_integration_key_01"
-    ),
+    "api_base_url": os.environ.get("API_BASE_URL", _CFG_API_BASE),
+    "agency_api_base_url": os.environ.get("AGENCY_API_BASE_URL", _CFG_AGENCY_URL),
+    "agency_api_key": os.environ.get("AGENCY_API_KEY", _CFG_AGENCY_KEY),
     "agency_api_secret": os.environ.get(
-        "AGENCY_API_SECRET",
-        "chatbot_api_secret_9f3a2c1b8e7d6f5a4c3b2a1d0e9f8a7b",
+        "AGENCY_API_SECRET", _CFG_AGENCY_SECRET
     ),
-    "wa_app_public_url": os.environ.get("WA_APP_PUBLIC_URL", "http://127.0.0.1:5000"),
-    "wa_webhook_notify_phone": os.environ.get("WA_WEBHOOK_NOTIFY_PHONE", ""),
+    "wa_app_public_url": os.environ.get("WA_APP_PUBLIC_URL", _CFG_WA_PUBLIC),
+    "wa_webhook_notify_phone": os.environ.get(
+        "WA_WEBHOOK_NOTIFY_PHONE", _CFG_NOTIFY
+    ),
 }
 
 INFRA_KEYS = tuple(_DEFAULTS.keys())
 _cache = {}
 
+_REMOTE_IP = "38.84.24.79"
+_PROD_PYTHON = f"https://{_REMOTE_IP}:5000"
+_PROD_AGENCY = "https://orange-rat-729701.hostingersite.com/api"
+
 
 def clear_cache():
     _cache.clear()
+
+
+def normalize_infra_value(key, value):
+    """Force production-safe URLs so bad UI input cannot break the stack."""
+    text = "" if value is None else str(value).strip()
+
+    if key == "api_base_url":
+        # Browser must always use Hostinger PHP proxy
+        return "/api"
+
+    if key == "agency_api_base_url":
+        if not text:
+            return _PROD_AGENCY
+        text = text.rstrip("/")
+        # Root Hostinger AgencyWA site without /api
+        if re.match(r"^https?://orange-rat-729701\.hostingersite\.com/?$", text, re.I):
+            return _PROD_AGENCY
+        if text.lower().endswith("/agencywa"):
+            return text + "/api"
+        return text
+
+    if key == "wa_app_public_url":
+        if not text:
+            return _PROD_PYTHON
+        # Any variant of the RDP IP → canonical HTTPS:5000
+        if _REMOTE_IP in text:
+            return _PROD_PYTHON
+        text = text.rstrip("/")
+        # Mistaken Hostinger /api as webhook base
+        if text.endswith("/api") and "hostingersite.com" in text.lower():
+            return _PROD_PYTHON
+        return text
+
+    return text
 
 
 def _load_db():
@@ -42,7 +95,7 @@ def _load_db():
             if key in ("agency_api_key", "agency_api_secret"):
                 out[key] = secret_store.decrypt(raw) if raw else ""
             else:
-                out[key] = raw
+                out[key] = normalize_infra_value(key, raw)
         return out
     finally:
         db.close()
@@ -56,6 +109,8 @@ def get(key, default=None):
     val = _cache.get(key)
     if val is None or val == "":
         val = _DEFAULTS[key]
+    if key in ("api_base_url", "agency_api_base_url", "wa_app_public_url"):
+        val = normalize_infra_value(key, val)
     return val if val is not None else default
 
 

@@ -14,6 +14,22 @@ LEGACY_GEMINI_KEY = "gemini_key"
 SECRET_KEYS = secret_store.SECRET_SETTING_KEYS
 
 
+def _seed_infra_defaults(db):
+    """Write production infra URLs when missing or clearly wrong."""
+    for key in INFRA_KEYS:
+        if key in SECRET_KEYS:
+            continue
+        row = db.row("site_settings", {"setting_key": key})
+        raw = (row or {}).get("setting_value")
+        fixed = infra_settings.normalize_infra_value(key, raw if raw is not None else "")
+        default = infra_settings.get(key) if not (raw or "").strip() else fixed
+        if not row:
+            _upsert(db, key, default)
+        elif fixed != (raw or "").strip():
+            _upsert(db, key, fixed)
+    infra_settings.clear_cache()
+
+
 def ensure_schema():
     """Create the site_settings table (key/value) if it does not exist.
 
@@ -33,6 +49,7 @@ def ensure_schema():
             """
         )
         _migrate_secrets(db)
+        _seed_infra_defaults(db)
     finally:
         db.close()
 
@@ -102,6 +119,7 @@ def get_site_settings():
     db = Database()
     try:
         _migrate_secrets(db)
+        _seed_infra_defaults(db)
         rows = db.select("site_settings")
     finally:
         db.close()
@@ -163,6 +181,8 @@ def save_site_settings():
                 _upsert(db, key, secret_store.encrypt(text))
                 if key == GEMINI_API_KEY:
                     _delete_key(db, LEGACY_GEMINI_KEY)
+            elif key in INFRA_KEYS:
+                _upsert(db, key, infra_settings.normalize_infra_value(key, value))
             else:
                 _upsert(db, key, value)
 
