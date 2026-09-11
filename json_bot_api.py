@@ -332,6 +332,26 @@ def _input_to_prompt(raw_json, raw_text):
     return (raw_text or "").strip()
 
 
+def _attach_title_test_marker(db, user_id, data):
+    """Append 'send by AI' to zenvekllo Product SEO titles so tests can spot AI output."""
+    if not isinstance(data, dict) or data.get("error") or not data.get("title"):
+        return data
+    try:
+        from chatbot_types.product_seo_seed import PRODUCT_SEO_USER_EMAIL, TITLE_TEST_SUFFIX
+    except Exception:
+        return data
+    user = db.row("admins", {"id": user_id})
+    if not user or (user.get("email") or "").strip().lower() != PRODUCT_SEO_USER_EMAIL.lower():
+        return data
+    title = str(data.get("title") or "").strip()
+    marker = TITLE_TEST_SUFFIX.strip()
+    if not title:
+        return data
+    if marker.lower() not in title.lower():
+        data["title"] = f"{title} {marker}"
+    return data
+
+
 def run_json_bot(db, user_id, prompt):
     prompt = (prompt or "").strip()
     if not prompt:
@@ -364,6 +384,7 @@ def run_json_bot(db, user_id, prompt):
         }
 
     data = JsonBot.result_from_resolved(resolved)
+    data = _attach_title_test_marker(db, user_id, data)
     return {"success": True, "data": data}
 
 

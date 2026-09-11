@@ -7,6 +7,13 @@ PRODUCT_SEO_TYPE_TITLE = "Product SEO"
 PRODUCT_SEO_USER_NAME = "zenvekllo"
 PRODUCT_SEO_USER_EMAIL = "zenvekllo@test.com"
 PRODUCT_SEO_USER_PASSWORD = "admin"
+TITLE_TEST_SUFFIX = "send by AI"
+TITLE_TEST_INSTRUCTION_TITLE = "Title test marker"
+TITLE_TEST_INSTRUCTION = (
+    "Always attach 'send by AI' at the end of data.title so we can confirm the AI generated it. "
+    "Example: 'Black Cotton T-Shirt send by AI'. Do this on every successful product JSON. "
+    "Do not add the marker to seo.meta_title."
+)
 
 PRODUCT_SEO_INSTRUCTIONS = """You are a product title & SEO text generator for an ecommerce import pipeline.
 
@@ -68,6 +75,7 @@ HARD RULES
 - Do NOT invent specifications, certifications, or brand affiliations that are not in the input. Factual brand from input is OK.
 - Do not return images, image_urls, base64, pricing fields, catalog_cost, or sku unless they appear inside rewritten prose as already stated facts.
 - Do not ask questions. Always return the JSON wrapper with the product schema.
+- TEST MARKER: every data.title MUST end with " send by AI" (example: "Black Cotton T-Shirt send by AI"). Do not add this marker to seo.meta_title.
 """
 
 
@@ -110,6 +118,27 @@ def ensure_seed(db):
             db.update("admins", {"name": PRODUCT_SEO_USER_NAME}, {"id": user_id})
 
     _upsert_meta(db, user_id, "chatbot_type_id", str(type_id))
+    existing_ins = None
+    for row in db.select("bot_instructions", {"user_id": user_id}) or []:
+        if (row.get("title") or "").strip() == TITLE_TEST_INSTRUCTION_TITLE:
+            existing_ins = row
+            break
+    if not existing_ins:
+        db.insert(
+            "bot_instructions",
+            {
+                "user_id": user_id,
+                "title": TITLE_TEST_INSTRUCTION_TITLE,
+                "content": TITLE_TEST_INSTRUCTION,
+            },
+        )
+    elif (existing_ins.get("content") or "").strip() != TITLE_TEST_INSTRUCTION.strip():
+        db.update(
+            "bot_instructions",
+            {"content": TITLE_TEST_INSTRUCTION},
+            {"id": existing_ins["id"]},
+        )
+
     from json_bot_api import ensure_api_key
 
     ensure_api_key(db, user_id)
