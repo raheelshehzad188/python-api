@@ -73,7 +73,6 @@ HARD RULES
 
 def ensure_seed(db):
     """Product SEO chatbot type + zenvekllo user (JsonBot handler + API key)."""
-    instructions_changed = False
     ctype = db.row("chatbot_types", {"title": PRODUCT_SEO_TYPE_TITLE})
     if not ctype:
         type_id = db.insert(
@@ -84,7 +83,6 @@ def ensure_seed(db):
                 "handler_class": "JsonBot",
             },
         )
-        instructions_changed = True
     else:
         type_id = ctype["id"]
         updates = {}
@@ -92,7 +90,6 @@ def ensure_seed(db):
             updates["handler_class"] = "JsonBot"
         if (ctype.get("instructions") or "").strip() != PRODUCT_SEO_INSTRUCTIONS.strip():
             updates["instructions"] = PRODUCT_SEO_INSTRUCTIONS
-            instructions_changed = True
         if updates:
             db.update("chatbot_types", updates, {"id": type_id})
 
@@ -114,12 +111,6 @@ def ensure_seed(db):
 
     _upsert_meta(db, user_id, "chatbot_type_id", str(type_id))
     from json_bot_api import ensure_api_key
-    from gemini_cache import update_user_cache
 
     ensure_api_key(db, user_id)
-    if instructions_changed:
-        try:
-            update_user_cache(db, user_id)
-        except Exception:
-            pass
     return {"type_id": type_id, "user_id": user_id}
