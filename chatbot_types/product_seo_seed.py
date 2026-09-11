@@ -35,9 +35,10 @@ Always respond with this exact wrapper (no extra keys at the top level):
   "language": "en"
 }
 
-If the request is unusable (empty, not a product, missing title and description), set data to:
-{ "error": "short message", "code": "invalid_input" }
-Do not mix error fields with product fields.
+NEVER return { "error", "code": "invalid_input" } for thin, placeholder, or generic scrape data.
+Examples that MUST still produce the full product object: "Raw scraped title", short HTML, empty description, missing brand, dummy bullets.
+Only if the HTTP body is completely empty may you use:
+{ "error": "No product payload", "code": "invalid_input" }
 
 =========================================================
 INPUT YOU WILL RECEIVE
@@ -46,9 +47,11 @@ JSON may include: source_url, source_hostname, sku, title, description,
 short_description, bullet_points, brand, category_hints, attributes,
 price_context, image_urls, target_language, market.
 
+- Always produce the full `data` product object above. Never refuse because copy is "too generic".
 - image_urls are OPTIONAL CONTEXT only — ignore for output.
 - price_context is OPTIONAL CONTEXT only — do not return prices or price changes.
 - description may be raw HTML; strip junk and rewrite as clean copy.
+- If title/description look like placeholders, still write a shop-ready listing from brand, category_hints, attributes, hostname, and any real words present.
 
 =========================================================
 HARD RULES
@@ -61,16 +64,16 @@ HARD RULES
 - seo.meta_description ≤ 160 characters.
 - seo.slug_suggestion: lowercase ASCII kebab-case, ≤ 80 chars, no spaces or punctuation except hyphen.
 - seo.keywords and seo.tags: max 15 items each, short strings.
-- bullet_points: 3–8 benefit-led points when the input supports them; never invent specs.
-- ONLY use facts present in the input. Do NOT invent specifications, shipping, warranties, certifications, quantities, materials, or brand affiliations.
-- Factual brand from input is OK. Never claim unofficial partnerships.
+- bullet_points: 3–8 benefit-led points from known attributes (colour, category, brand). Do not invent materials, measurements, shipping, or warranties.
+- Do NOT invent specifications, certifications, or brand affiliations that are not in the input. Factual brand from input is OK.
 - Do not return images, image_urls, base64, pricing fields, catalog_cost, or sku unless they appear inside rewritten prose as already stated facts.
-- Do not ask questions. Always return the JSON wrapper.
+- Do not ask questions. Always return the JSON wrapper with the product schema.
 """
 
 
 def ensure_seed(db):
     """Product SEO chatbot type + zenvekllo user (JsonBot handler + API key)."""
+    instructions_changed = False
     ctype = db.row("chatbot_types", {"title": PRODUCT_SEO_TYPE_TITLE})
     if not ctype:
         type_id = db.insert(
@@ -81,6 +84,7 @@ def ensure_seed(db):
                 "handler_class": "JsonBot",
             },
         )
+        instructions_changed = True
     else:
         type_id = ctype["id"]
         updates = {}
@@ -88,6 +92,7 @@ def ensure_seed(db):
             updates["handler_class"] = "JsonBot"
         if (ctype.get("instructions") or "").strip() != PRODUCT_SEO_INSTRUCTIONS.strip():
             updates["instructions"] = PRODUCT_SEO_INSTRUCTIONS
+            instructions_changed = True
         if updates:
             db.update("chatbot_types", updates, {"id": type_id})
 
@@ -109,6 +114,12 @@ def ensure_seed(db):
 
     _upsert_meta(db, user_id, "chatbot_type_id", str(type_id))
     from json_bot_api import ensure_api_key
+    from gemini_cache import update_user_cache
 
     ensure_api_key(db, user_id)
+    if instructions_changed:
+        try:
+            update_user_cache(db, user_id)
+        except Exception:
+            pass
     return {"type_id": type_id, "user_id": user_id}
