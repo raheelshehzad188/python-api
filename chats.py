@@ -164,17 +164,24 @@ def sanitize_customer_message(text):
 
     # Prefer structured JSON message when present (even with leading junk).
     parsed = Gemini._parse_json_payload(t)
+    if isinstance(parsed, list):
+        return json.dumps(parsed, ensure_ascii=False, indent=2)
     if isinstance(parsed, dict):
         rtype = (parsed.get("type") or "").strip().lower()
         if rtype in ("tool", "sql", "job", "error"):
             return ""
+        if rtype == "json":
+            payload = parsed.get("data", parsed)
+            return json.dumps(payload, ensure_ascii=False, indent=2)
         for key in ("message", "text", "reply", "content", "body"):
             val = parsed.get(key)
             if isinstance(val, str) and val.strip():
                 t = val.strip()
                 break
+            if isinstance(val, (dict, list)):
+                return json.dumps(val, ensure_ascii=False, indent=2)
         else:
-            return ""
+            return json.dumps(parsed, ensure_ascii=False, indent=2)
 
     # Drop reasoning lines / leading thought paragraphs.
     lines = []
@@ -225,7 +232,7 @@ def _normalize_reply_json(reply_json, reply_text):
         if _is_job_payload(reply_json):
             return reply_json
         rtype = (reply_json.get("type") or "").strip().lower()
-        if rtype in ("sql", "job", "error", "tool"):
+        if rtype in ("sql", "job", "error", "tool", "json"):
             return reply_json
         msg = reply_json.get("message")
         if rtype == "message" and isinstance(msg, str) and msg.strip():
@@ -249,7 +256,7 @@ def _normalize_reply_json(reply_json, reply_text):
         if _is_job_payload(recovered):
             return recovered
         rtype = (recovered.get("type") or "").strip().lower()
-        if rtype in ("sql", "job", "error", "tool"):
+        if rtype in ("sql", "job", "error", "tool", "json"):
             return recovered
         for key in ("message", "text", "reply", "content"):
             val = recovered.get(key)

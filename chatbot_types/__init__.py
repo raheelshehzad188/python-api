@@ -1,6 +1,7 @@
 from .ecommerce import Ecommerce
 from .general import General
 from .job_posting import Job_posting
+from .json_bot import JsonBot
 from .services import Services
 from .restaurant import Restaurant
 from .tester import Tester
@@ -9,6 +10,7 @@ CLASSES = {
     Ecommerce.name: Ecommerce,
     General.name: General,
     Job_posting.name: Job_posting,
+    JsonBot.name: JsonBot,
     Services.name: Services,
     Restaurant.name: Restaurant,
     Tester.name: Tester,

@@ -37,10 +37,14 @@ def ensure_schema():
         from .services_seed import ensure_seed as ensure_services_seed
         from .restaurant_seed import ensure_seed as ensure_restaurant_seed
         from .tester_seed import ensure_seed as ensure_tester_seed
+        from .json_bot_seed import ensure_seed as ensure_json_bot_seed
+        from .product_seo_seed import ensure_seed as ensure_product_seo_seed
         ensure_general_seed(db)
         ensure_services_seed(db)
         ensure_restaurant_seed(db)
         ensure_tester_seed(db)
+        ensure_json_bot_seed(db)
+        ensure_product_seo_seed(db)
     finally:
         db.close()
 

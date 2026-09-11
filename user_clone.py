@@ -14,6 +14,8 @@ SKIP_META_KEYS = frozenset({
     "wa_webhook_token",
     "wa_reply_api_key",
     "gemini_cache_id",
+    "json_bot_api_key",
+    "json_bot_api_key_hash",
 })
 
 
